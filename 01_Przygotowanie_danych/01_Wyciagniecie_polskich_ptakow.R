@@ -3,9 +3,20 @@ library(tidyverse)
 
 train <- read_csv("01_Dane/train.csv")
 
-polskie <- train %>% 
+# polskie <- train %>%
+#  filter(country == 'Poland') %>%
+#  select(filename) %>% pull
+
+gatunki <- train %>% 
   filter(country == 'Poland') %>% 
-  select(filename) %>% pull
+  count(ebird_code) %>% 
+  select(ebird_code) %>% 
+  pull
+
+polskie <- train %>% 
+  filter(ebird_code %in% gatunki) %>% 
+  select(filename) %>% 
+  pull
 
 list_of_txts<-unzip("C:/Users/Krystian/Downloads/train_audio.zip",list=TRUE)[,1]
 
@@ -15,7 +26,7 @@ unzip("C:/Users/Krystian/Downloads/train_audio.zip", files=do_wypakowania)
 
 statusy <- tibble(
   species = train %>% 
-    filter(country == 'Poland') %>% 
+    filter(ebird_code %in% gatunki) %>% 
     select(species) %>% 
     pull,
   link = do_wypakowania)
