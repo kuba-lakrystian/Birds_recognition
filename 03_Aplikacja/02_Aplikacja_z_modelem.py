@@ -7,7 +7,9 @@ import librosa
 import numpy as np
 import pandas as pd
 import keras
-
+import base64
+import shutil
+from io import BytesIO
 
 app = dash.Dash(__name__)
 
@@ -22,10 +24,14 @@ def load_files():
     lb = pd.read_pickle(r'C:\\Users\\Krystian\\Desktop\\github\\Birds_recognition\\Birds_recognition\\00_Model\\lb.pickle')
     model = keras.models.load_model('C:\\Users\\Krystian\\Desktop\\github\\Birds_recognition\\Birds_recognition\\00_Model\\model_ann.h5')
 
-def extract_features(files):
+def extract_features(content_string, filename):
   try:
-      file_name = os.path.join(os.path.abspath('C:\\Users\\Krystian\\Desktop\\github\\Birds_recognition\\Birds_recognition')+'\\'+files)
-      X, sample_rate = librosa.load(file_name, res_type='kaiser_fast')
+      decoded = base64.b64decode(content_string)
+      with open('dummy.' + filename, 'wb') as file: # this is really annoying!
+          shutil.copyfileobj(BytesIO(decoded), file, length=131072)
+      X, sample_rate = librosa.load('dummy.' + filename, mono=True)
+      os.remove('dummy.' + filename)
+    
       mfccs = np.mean(librosa.feature.mfcc(y=X, sr=sample_rate, n_mfcc=40).T,axis=0)
       stft = np.abs(librosa.stft(X))
       chroma = np.mean(librosa.feature.chroma_stft(S=stft, sr=sample_rate).T,axis=0)
@@ -71,44 +77,48 @@ app.layout = html.Div(
                 "textAlign": "center",
                 "margin": "10px",
             },
-            multiple=True,
+            multiple=False,
         ),
         html.H2("Twój ptak to:"),
         html.Ul(id="file-list"),
+        html.Ul(id="drugi"),
     ],
     style={"max-width": "500px"},
 )
 
 
 @app.callback(
-    Output("file-list", "children"),
-    Input("upload-data", "filename"),
+    [Output("file-list", "children"), Output('drugi', "children")],
+    [Input("upload-data", "filename"), Input("upload-data", "contents")]
 )
-def update_output(uploaded_filenames):
+def update_output(uploaded_filenames, uploaded_file_contents):
     """Save uploaded files and regenerate the file list."""
 
-    if uploaded_filenames is not None:
-        for filename in uploaded_filenames:
-            load_files()
+    if uploaded_filenames is not None and uploaded_file_contents is not None:
+        
+        load_files()
+        
+        content_type, content_string = uploaded_file_contents.split(',')
+        train_features = extract_features(content_string, uploaded_filenames)
+        
+        features_train = []
             
-            train_features = extract_features(filename)
-            
-            features_train = []
-            
-            features_train.append(np.concatenate((
+        features_train.append(np.concatenate((
                 train_features[0],
                 train_features[1], 
                 train_features[2], 
                 train_features[3],
                 train_features[4]), axis=0))
             
-            X_train = np.array(features_train)
+        X_train = np.array(features_train)
             
-            predictions_mod = prepare_prediction(X_train)
+        predictions_mod = prepare_prediction(X_train)
             
-            return [html.Li(predictions_mod)]            
+        return [html.Li(predictions_mod), html.Li(uploaded_filenames)]            
     else:
-        return [html.Li("Nie wybrano pliku dźwiękowego")]
+        return [html.Li("Nie wybrano pliku dźwiękowego"), html.Li("Załaduj dźwięk")]
 
 if __name__ == "__main__":
     app.run_server(debug=True)
+    
+#https://github.com/teticio/Deej-A.I./blob/master/Deej-A.I.py
